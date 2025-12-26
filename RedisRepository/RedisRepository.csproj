@@ -6,7 +6,8 @@
     <Nullable>enable</Nullable>
     
     <!-- Package Metadata -->
-    <PackageId>RedisRepository</PackageId>
+    <PackageId>cmoi936.RedisRepository</PackageId>
+    <Version>1.0.0</Version>
     <Authors>cmoi936</Authors>
     <Company>cmoi936</Company>
     <Description>Implémentation générique d'un repository Redis pour la gestion de données de tout type avec support de sérialisation JSON, expiration et opérations CRUD optimisées.</Description>
