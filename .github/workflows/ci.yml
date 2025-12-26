@@ -13,6 +13,11 @@ env:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: read
+      checks: write
+      pull-requests: write
     
     services:
       redis:
@@ -41,7 +46,7 @@ jobs:
       run: dotnet build --configuration ${{ env.CONFIGURATION }} --no-restore
 
     - name: Run tests
-      run: dotnet test --configuration ${{ env.CONFIGURATION }} --no-build --verbosity normal --logger "trx;LogFileName=test-results.trx" --collect:"XPlat Code Coverage"
+      run: dotnet test --configuration ${{ env.CONFIGURATION }} --no-build --verbosity normal --logger "trx;LogFileName=test-results.trx" --results-directory ./TestResults --collect:"XPlat Code Coverage"
 
     - name: Upload test results
       uses: actions/upload-artifact@v4
@@ -49,12 +54,12 @@ jobs:
       with:
         name: test-results
         path: |
-          **/*.trx
-          **/coverage.cobertura.xml
+          ./TestResults/**/*.trx
+          ./TestResults/**/coverage.cobertura.xml
         retention-days: 7
 
     - name: Test Summary
-      uses: test-summary/action@v2
+      uses: EnricoMi/publish-unit-test-result-action@v2
       if: always()
       with:
-        paths: "**/*.trx"
+        files: "./TestResults/**/*.trx"
