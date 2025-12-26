@@ -2,38 +2,45 @@
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
 using RedisRepository.Extensions;
+using Testcontainers.Redis;
 
 namespace RedisRepository.IntegrationTests;
 
 /// <summary>
 /// Classe de base pour les tests d'intégration Redis fournissant la configuration commune et l'infrastructure de test.
+/// Utilise Testcontainers pour démarrer automatiquement une instance Redis pour chaque session de tests.
 /// </summary>
 public abstract class RedisIntegrationTestBase : IAsyncLifetime
 {
     protected IServiceProvider ServiceProvider { get; private set; } = null!;
     protected IConnectionMultiplexer ConnectionMultiplexer { get; private set; } = null!;
     protected IDatabase Database { get; private set; } = null!;
-
+    
+    private RedisContainer _redisContainer = null!;
     private readonly List<string> _keysToCleanup = new();
 
     private const int TestDatabaseIndex = 15; // Utilise une base de données dédiée aux tests
 
     public virtual async Task InitializeAsync()
     {
+        // Création et démarrage du conteneur Redis avec Testcontainers
+        _redisContainer = new RedisBuilder()
+            .WithImage("redis:7-alpine")
+            .WithName($"redis-test-{Guid.NewGuid():N}")
+            .WithCleanUp(true)
+            .Build();
+
+        await _redisContainer.StartAsync();
+
         // Configuration des services
         var services = new ServiceCollection();
 
         // Configuration du logging pour les tests
         services.AddLogging(builder => builder.AddConsole().SetMinimumLevel(LogLevel.Debug));
 
-        // Configuration Redis avec une base de données dédiée aux tests
-        services.AddRedisServices(options =>
-        {
-            options.EndPoints.Add("localhost", 6379);
-            options.AbortOnConnectFail = false;
-            options.ConnectTimeout = 5000;
-            options.SyncTimeout = 5000;
-        });
+        // Configuration Redis avec la chaîne de connexion du conteneur Testcontainers
+        var connectionString = _redisContainer.GetConnectionString();
+        services.AddRedisServices(connectionString);
 
         ServiceProvider = services.BuildServiceProvider();
 
@@ -51,7 +58,8 @@ public abstract class RedisIntegrationTestBase : IAsyncLifetime
         catch (Exception ex)
         {
             throw new InvalidOperationException(
-                "Impossible de se connecter à Redis. Assurez-vous que Redis est démarré sur localhost:6379.", ex);
+                $"Impossible de se connecter au conteneur Redis Testcontainers. " +
+                $"Connection string: {connectionString}", ex);
         }
     }
 
@@ -63,7 +71,7 @@ public abstract class RedisIntegrationTestBase : IAsyncLifetime
             try
             {
                 var keysArray = _keysToCleanup.Select(k => (RedisKey)k).ToArray();
-                //await Database.KeyDeleteAsync(keysArray);
+                await Database.KeyDeleteAsync(keysArray);
             }
             catch (Exception ex)
             {
@@ -74,6 +82,18 @@ public abstract class RedisIntegrationTestBase : IAsyncLifetime
 
         // Libération des ressources
         ConnectionMultiplexer?.Dispose();
+        
+        if (ServiceProvider is IDisposable disposable)
+        {
+            disposable.Dispose();
+        }
+
+        // Arrêt et suppression du conteneur Redis
+        if (_redisContainer != null)
+        {
+            await _redisContainer.StopAsync();
+            await _redisContainer.DisposeAsync();
+        }
     }
 
     /// <summary>
